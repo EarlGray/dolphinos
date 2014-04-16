@@ -1,0 +1,70 @@
+
+			Welcome to DolphinOS!
+					ver. 0.0.1
+	
+					"I'll build my own DOS! With blackjack 
+					and hookers!"
+						- slightly paraphrased Bender
+
+		Introduction
+	DolphinOS is tiny and simplest operating system for x86 platform. Written
+for some assembler experience and lulz.
+		
+		Features: 
+	- bootloader for FAT12 file system;
+	- monolithic kernel written in ASM (NASM used);
+	- simplest shell;
+	- single-user, single-task 16bit operating system;
+	- support for FAT12 (under development);
+	- memory handler (testing);
+
+		Agenda:
+	- support for fat32/vfat, ext2, iso9660 file systems;
+	- loading user programs in .com format (ELF and PE later);
+	- basic text editor;
+	- basic VC/MC-like file manager;
+	- basic graphics support;
+	- valid unix-like shell;
+	- ??????
+	- PROFIT!!!
+
+		Kernel
+		
+		File systems
+	File system hierarchy will be a single unix-like tree. There is a root, 
+/, where traditional  unix directories  is located:  /bin, /dev, /home.  System
+disk is mounted to /, another devices - to mount points table entries.
+	
+		Heap
+	Heap begins behind the kernel and has its own segment, whenever referred 
+to pointer allocated with memalloc, it means HEAP_SEG:pointer. 
+	Heap segment is KERNEL_SEGM + kernel_end >> 4, adresses are 0x0000-0xffff
+	Structure of heap:
+	heap is build from chunks, each chunk contains header (4b) and arbitrary 
+data after header:
+	 <----- chunk 0 -------> <- 1 -> <----- chunk 2 ---> ...
+	|----|------------------|----|--|----|--------------| ... |----|--|0000|
+	  h1      data of h1      h2 data h3    data of h3          hN      end
+	where h1, h2, h3 - headers of chunks
+	Header structure is:
+	|--------|--------|---------|---------|
+	<-- data length -> <- Serv-> <- CSum ->
+	where 	data length	- big-endian word, length of data after header
+		Serv 		- service flags, this byte is 0, if chunk is free
+		CSum 		- control sum,
+			 == high[datalentgh] + low[datalength] + low[datapointer]
+	
+		License
+	Now it is BEERWARE: this source code provided AS IS. Author and owner 
+does not take any responsibility for all misusage and data corruption caused
+by this product, but receives beer if it helped you :)
+
+		Authors
+	Currently product is developed and maintained by Dmytro Sirenko 
+(email: dmytrish@gmail.com, jabber: EarlGray@jabber.kiev.ua, ICQ: 350799719). 
+All constructive feedbacks and notes are welcomed.
+		
+		Special aknowledgements to:
+	- NASM command for great development tool;
+	- VIM for excellent code editor;
+	- all music group I'm listening to during coding :)

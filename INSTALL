@@ -1,0 +1,15 @@
+Compilation: 
+for Unix-like system users:
+	cd /path/to/dolphin
+	make image boot kernel 
+	# if you want, you can write it to floppy:
+	sudo dd if=dolphin.img of=/dev/fd0
+
+for Windows users:
+	1) compile kernel.asm with NASM with executable name KERNEL.BIN
+	2) copy it into the root of floppy disk 
+	3) compile bootloader (bfat12.asm) into BOOT.BIN 
+	4) write BOOT.BIN to the first sector of a floppy (with rawwrite.exe 
+		or whatever your Windoze's utility is);
+
+then boot from this floppy and enjoy!

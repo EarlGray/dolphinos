@@ -1,0 +1,21 @@
+
+vga.inc:
+	- arbitrary line drawing;
+	- fucking tetris
+	
+fat12.inc:
+	- find_next/find_file
+	- get_cluster_of_path
+	- reading/changing directory 
+	- uploading entire file into memory
+	- executing of loaded code
+	- fopen/fclose
+
+shell.inc:
+	- normal text commands
+	- search for executable if prompt is not a command
+
+intrs.inc:
+	- encapsulate func in interrupts
+	- add tetris to interrupts
+=
