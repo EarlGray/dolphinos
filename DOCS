@@ -1,0 +1,5 @@
+Available commands are:
+args <par1> <par2> <par3> ... <par$(MAX_ARGC)>
+	- parses command line into sequence of arguments;
+off - immediately turns off computer if ACPI is available;
+exit - quits the shell and turns off computer;

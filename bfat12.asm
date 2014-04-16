@@ -12,10 +12,12 @@
 ;	   boot2 at the end of this file
 ; ___________________________________________________________________
 
+%include "sysdefs.inc"
+
 USE_MEM		 equ 0x0200	; place in memory for temp. data
 FAT_ENTRY_SIZE	 equ 0x0020	; sizeof directory entry
-BOOT2_SEGM	 equ 0x0100	; address in memory for boot2
-BOOT2_OFFS	 equ 0x0000	; 
+BOOT2_SEGM	 equ KERNEL_SEGM	; address in memory for boot2
+BOOT2_OFFS	 equ KERNEL_OFFS	; 
 END_CLUSTER_MASK equ 0x0FF8	; marker of last cluster for FAT12
 
 %define DEBUG

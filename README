@@ -1,0 +1,11 @@
+DolphinOS v0.02
+
+After writing v0.01, hackish and scattered, I had considered about more 
+consistent and compatible OS with neat and clean source code, refined from
+nice-and-useless features, just bare DOS-compatible kernel containing necessary
+things only. I've been thinking a lot about system design, so my intent to do 
+something useful has been sinked in a heap of good intents.
+
+OS was completely rewritten (saving bootloader) in April, 2010. Writing a memory 
+manager and disk driver had stucked in uncertainties, so you have just a refined 
+source with even mcuh less functionality than in v0.01.

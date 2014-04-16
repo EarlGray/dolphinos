@@ -1,25 +1,44 @@
 ;
-; 	This file contains routins for text i/o 
+; 	This file contains routines for text i/o 
 ;	(c) Dmytro Sirenko, 2010
 ; ____________________________________________________________________
 
-%ifndef __TEXTMODE_INC
-%define __TEXTMODE_INC
+%ifndef __STDIO_INC_
+%define __STDIO_INC_
 
-%include "sysdefs.inc"
-%include "string.inc"
+%include "misc.inc"
+%include "msgs.inc"
 
-[segment .text]
+[section .text]
 
 ; ___________________________________________________________________
-hex_to_ascii:
-	cmp al, 10
-	sbb al, 96h
-	das
+press_any:
+; show "Press any key" message and waits for it
+	mov si, m_press_any
+	call print_string
+	call wait_key
 	ret
 
 ; ___________________________________________________________________
-display_string:
+print_char:
+print_ascii_al:
+	mov ah, 0x0E
+	mov bh, 0x00
+	int 0x10
+	retn
+
+; ___________________________________________________________________
+print_endl:
+	mov ax, 0x0E0D
+	mov bh, 0x00
+	int 0x10
+	mov al, 0x0A
+	int 0x10
+	retn
+
+; ___________________________________________________________________
+print_string:
+print_ds_si:
 ; displays string in ds:si
 ; args: si - offset of a string to display
 	pusha
@@ -35,27 +54,96 @@ display_string:
 .done:	popa
 	retn
 
-; ___________________________________________________________________
-set_cursor_pos:
-; args: dh - line, dl - column
-	xor bx, bx
-	mov ah, 02h		; bios func num
-	int 10h
+print_ds_dx:
+	pusha
+	mov si, dx
+	mov ah, 0x0E
+	movzx bx, byte [text_attr]
+.iter:
+	mov al, [si]
+	and al, al
+	jz .done
+	cmp al, '$'
+	je .done
+	int 0x10
+	lodsb
+	jmp .iter
+.done:	popa
 	retn
 
 ; ___________________________________________________________________
-get_cursor_pos:
-; args: none
-; out:  dh - line, dl - column
-	xor bx, bx
-	mov ah, 03h
-	int 10h
+read_string_dos:
+;; implements DOS 0Ah function behavior;
+	retn
+	
+; ___________________________________________________________________
+read_string:
+;; args:
+;;	ds:dx - address of a buffer up to 255 symbols, first symbol is
+;;		maximum count of symbols
+	pusha
+	mov cx, 0
+	mov di, dx
+	mov si, dx	; store it
+
+.type_loop:
+	call read_char
+	;; is valid ascii
+	cmp al, 0x20
+	jl .char_skipped
+	test al, 0x80
+	jnz .char_skipped
+	stosb
+	; echo
+	mov ah, 0x0E
+	mov bh, 0x00
+	int 0x10
+	jmp .type_loop
+
+.char_skipped:
+.bksp:	cmp al, 0x08
+	jne .enter
+	; remove last
+	mov word [di], 0
+	; is the first?
+	cmp di, si
+	jle .type_loop
+	dec di
+	; clear symbols
+	mov ax, 0x0E08
+	xor bh, bh
+	int 0x10
+	mov al, ' '
+	int 0x10
+	mov al, 0x08
+	int 0x10
+	jmp .type_loop	
+.escape:
+	; 
+	jmp .type_loop
+.enter:
+	cmp al, 0x0D
+	jne .type_loop
+	
+	; push the end if line into si
+	mov al, 0
+	stosb
+	; print end of line
+	call print_endl
+	popa		
 	retn
 
+; ___________________________________________________________________
+print_ascii_dl:
+	mov al, dl
+	mov ah, 0x0E
+	mov bh, 0x00
+	int 0x10
+	retn
 
 ; ___________________________________________________________________
 wait_key:
-get_char:
+read_char:
 ; waits for a key press, returns it
 ; args: none
 ; out:  al - ASCII-code, 0, or scan-code prefix
@@ -68,200 +156,89 @@ get_char:
 	mov ah, 11h
 	int 16h
 	jz .loop
+	;; clear keyboard buffer
 	push ds
 	push 0
 	pop ds
 	mov dx, word [041Ah]
 	mov word [041Ch], dx	; clear buffer
-	cmp al, 03		; Ctrl-C handler
-	jne .next0
-	pop ds
-	push shell.system_loop
-	jmp .ret
-.next0:
-	cmp al, 0x0C
-	jne .ret
-	;; it should be an interrupt
-;	jmp .ret
-.ret:
+	;; process some specific shortcuts
+	;call shortcuts
 	pop ds
 	retn
 
-out_char:
-; echo a character in al
-	pusha
-	mov ah, 0x0E
-	movzx bx, byte [text_attr]
-	int 0x10
-	popa
-	retn
-
-out_color_char:
-; args: al - ascii, bl - color attrs
-	pusha
+; ___________________________________________________________________
+print_hex_digit_al:
+	and al, 0x0F
+	movzx si, al
+	add si, .digits
+	mov al, byte [si]
 	mov ah, 0x0E
 	mov bh, 0x00
-	int 10h
-	popa
+	int 0x10
 	retn
+.digits	db	"0123456789ABCDEF"
 
-put_char:
+; ___________________________________________________________________
+print_hex_dl:
 ;; args:
-;;	ah - color attr, al - ascii, bh:bl - y:x
+;; 	dl - hexadecimal number to output
 	pusha
-	mov cx, ax
-	movzx ax, bh
-	movzx dx, byte [screen_width]
-	mul dl
-	movzx dx, bl
-	add ax, dx
-	shl ax, 1
-	push es
-	mov bx, TXTBUF_SEGM
-	mov es, bx
-	mov bx, ax
-	mov word [es:bx], cx
-	pop es
+	mov al, dl
+	shr al, 4
+	call print_hex_digit_al
+	mov al, dl
+	and al, 0x0F
+	call print_hex_digit_al
 	popa
 	retn
 
 ; ___________________________________________________________________
-press_any:
-; show "Press any key" message and waits for it
-	mov si, pakmsg
-	call display_string
-	call wait_key
-	ret
-pakmsg	db 13, 10, "Press any key to continue...", 13, 10, 0
-
-; ___________________________________________________________________
-read_prompt:
-; loop until enter is pressed, fills cmd_buf.
-; args, outs: none
-	mov cx, 0		; counter
-	mov di, cmd_buf
-
-.type_loop:			; while enter will be pressed
-	call get_char
-	; check whether a char is ascii
-	cmp al, 20h		; gap ascii code
-	jl	.char_skipped
-	test al, 80h
-	jnz	.char_skipped
-	; all is right
-	stosb			; add to cmd_buf
-	call out_char	; echo
-.char_skipped:
-.bksp:	cmp al, 0x08
-	jne .enter
-	; remove last character
-	mov word [di], 0
-	; is the first?
-	cmp di, cmd_buf
-	jle .type_loop
-	dec di
-	; don't leave tracks
-	mov al, 0x08
-	call out_char
-	mov al, ' '
-	call out_char
-	mov al, 0x08
-	call out_char
-	jmp .type_loop
-.enter:
-	cmp al, 0x0D	; enter ?
-	jne .type_loop
-
-	; push the end of line into cmd_buf
-	mov al, 0
-	stosb
-
-	; print end of line
-	mov al, 13
-	call out_char
-	mov al, 10
-	call out_char
+print_hex_dx:
+;; args:
+;; 	dx - hexadecimal number to output
+	pusha 
+	xchg dl, dh
+	call print_hex_dl
+	mov dl, dh
+	call print_hex_dl
+	popa
 	retn
 
 ; ___________________________________________________________________
-set_video_mode:
-; sets video mode for text
-; arguments: video mode in al (03h by default)
-	test al, al
-	jnz vm_ok
-	mov al, 03h
-vm_ok:
-	mov ah, 00h
-	int 10h
-	retn
-
-;; __________________________________________________________________
-show_ascii_table:
-	mov si, .asciimsg
-	call display_string
-	xor cx, cx
-.asc_l:
-	mov si, endl
-	call display_string
-	xor di, di
-.asc_l1:
-	mov al, cl
-	shl al, 4
-	add ax, di
-	call out_char
-	mov al, ' '
-	call out_char
-	inc di
-	cmp di, 0x10
-	jl .asc_l1
-	inc cx
-	cmp cx, 0x10
-	jl .asc_l
-
-	retn
-.asciimsg	db 	"Ascii table:", 13, 10, 0
-
-;; __________________________________________________________________
-show_key_info:
-;; 
-	call get_char
+read_hex_dx:
+;; args:
+;;	es:di - address of asciiz string in memory
+;; rets:
+;;	dx - hexadecimal number in [es:di]
 	
-	mov si, .str_symb
-	call display_string
-	mov dl, al
-	call dbg_print_char_dl	
-
-	mov si, .str_ascii
-	call display_string
-	call dbg_print_hex_dl
-
-	test dl, dl
-	jz .ext
-	mov si, .str_scan
-	jmp .end
-.ext:	mov si, .str_ext
-.end:	call display_string
-	mov dl, ah
-	call dbg_print_hex_dl
-
-	mov si, endl
-	call display_string
 	retn
-.str_symb	db	13, 10, "Symbol: ", 0
-.str_ascii	db	13, 10, "Ascii : ", 0
-.str_ext	db	13, 10, "ExtAsc: ", 0
-.str_scan	db	13, 10, "Scan  : ", 0
 
-;; __________________________________________________________________
-;; _________________  DATA and defines  _____________________________
-;; __________________________________________________________________
-[segment .data]
+; ___________________________________________________________________
+ascii_to_hex_digit_dl:
+	cmp dl, '0'
+	jl .fail
+	cmp dl, '9'
+	jg .next
+	sub dl, '0'
+	retn
+.next:
+	cmp dl, 'A'
+	jl .fail
+	cmp dl, 'F'
+	jg .next1
+	sub dl, 'A' - 10
+	retn
+.next1:	cmp dl, 'a'
+	jl .fail
+	cmp dl, 'f'
+	jg .fail
+	sub dl, 'a' - 10
+	retn
+.fail:	mov dl, 0xFF
+	retn
 
-endl	db	13, 10, 0
-clsymb	db	8, ' ', 8, 0
+[section .data]
+text_attr	db	0x07	;; default
 
-text_attr	db	0x07
-screen_width	db	80
-screen_height	db	25
-
-%endif
+%endif ;; __STDIO_INC_

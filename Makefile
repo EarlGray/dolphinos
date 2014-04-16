@@ -8,40 +8,46 @@ MNT_DIR=dolphin
 VBOX_OS=dolphin
 
 default:kernel run 
-all: 	boot kernel run
+all: 	image boot kernel run clean
 
 run:
+	@echo "### Starting DolphinOS..."
 	VirtualBox --startvm $(VBOX_OS)
 
 boot:
-	nasm $(BOOT) -o $(MBR_FILE)
-	dd if=$(MBR_FILE) of=$(IMG_FILE) conv=notrunc
+	@echo "### Compiling bootloader..."
+	@nasm $(BOOT) -o $(MBR_FILE) && echo "# Bootloader compiled..."
+	@dd if=$(MBR_FILE) of=$(IMG_FILE) conv=notrunc
 
 clean:
-	rm $(KERN).lst || /bin/true
-	rm $(KERNEL) || /bin/true
-	rm $(MBR_FILE) || /bin/true
-	rmdir $(MNT_DIR)
+	@rm $(KERN).lst || /bin/true
+	@rm $(KERNEL) || /bin/true
+	@rm $(MBR_FILE) || /bin/true
+	@rmdir $(MNT_DIR) || /bin/true
+	@echo "### Build is cleaned."
 
 image:	
-	dd if=/dev/zero of=$(IMG_FILE) bs=1k count=1440
-	/sbin/mkfs.msdos -n DOLPHOS $(IMG_FILE)
+	@echo -e "\n\n### Creating and formatting image..."
+	@dd if=/dev/zero of=image.img bs=1k count=1440
+	@/sbin/mkfs.msdos -n DOLPHOS image.img
 
 mount:
-	if [ ! -x $(MNT_DIR) ] ; then mkdir $(MNT_DIR); \
-	else echo "Already mounted"; exit 0; fi
-	sudo mount -t msdos -o loop $(IMG_FILE) $(MNT_DIR) || /bin/true
-	echo "Mounted"
+	@if [ ! -x $(MNT_DIR) ] ; then mkdir $(MNT_DIR); \
+	else echo "### Already mounted"; exit 0; fi
+	@sudo mount -t msdos -o loop $(IMG_FILE) $(MNT_DIR) || /bin/true
+	@echo "### Mounted successfully..."
 
 umount: 
-	sudo umount $(MNT_DIR)
-	rmdir $(MNT_DIR)
+	@sudo umount $(MNT_DIR) || /bin/true
+	@rmdir $(MNT_DIR)
+	@echo "### Unmounted"
 
 dump:
-	dd if=$(IMG_FILE) bs=1k count=10 | hexdump -C > $(IMG_FILE).hex
+	@dd if=$(IMG_FILE) bs=1k count=10 | hexdump -C > $(IMG_FILE).hex
 
 kernel:
-	nasm $(KERN) -o $(KERNEL) -l $(KERN).lst
-	make mount
-	sudo cp $(KERNEL) $(MNT_DIR)
-	make umount
+	@echo -e "\n### Compiling kernel..."
+	@nasm $(KERN) -o $(KERNEL) && echo "### The kernel compiled successfully..."
+	@make mount
+	@sudo cp $(KERNEL) $(MNT_DIR) && echo "### The kernel has been installed..." || /bin/true
+	@make umount

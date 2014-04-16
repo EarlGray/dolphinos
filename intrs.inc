@@ -1,222 +1,162 @@
 ;
-;	Interrupts setter and handler for Dolphin OS kernel
-;	(c) Dmytro Sirenko
+;	Interrupts handlers and initializers
+;	DolphinOS (c) Dmytro Sirenko, 2010
 ; ___________________________________________________________________
 
-%ifndef __INTR_INC
-%define __INTR_INC
+%ifndef __INTRS_INC__
+%define __INTRS_INC__
 
-%macro SET_INT 1
-	mov word [es : %1 * 4], int%1
-	mov word [es : %1 * 4 + 2], KERNEL_SEGM
-%endmacro
-	
+%include "sysdefs.inc"
+%include "stdio.inc"
 
-[segment .text]
-
-INTRTBL_SEGM	equ 	0x0000
+[section .text]
 
 ; ___________________________________________________________________
-; intr_init
-; initializes OS interrupts table 
-
-intr_init:
-	cli
-	push es
-	mov ax, INTRTBL_SEGM
-	mov es, ax
-
-	;SET_INT 08h
-	;; for Ctrl-Break handling
-	SET_INT 1Bh
-	;; exit from programs
-	SET_INT 20h
-	;; every second alarm
-	SET_INT 4Ah
-	;; seconds start
-	int 4Ah
-
-	pop es
-	sti
+init_interrupts:
+	;; set SYS_INTR handler to sys_int_handler
+	push	ds
+	xor	ax, ax
+	mov 	ds, ax
+	mov	si, SYS_INTR
+	shl	si, 2	;; mul by 4, int handler size
+	mov	ax, sys_int_handler
+	mov	[si], ax
+	mov	ax, KERNEL_SEGM
+	mov	[si + 2], ax
+	pop	ds
 	retn
 
 ; ___________________________________________________________________
-; int 1Bh
-; handler of Ctrl-Break
-int1Bh:
-	;; clear stack
-	popf
-	pop ax
-	pop ax
-	;; go to system loop
-	push shell.system_loop
-	retn
+sys_int_handler:
+;; args:
+;;	ah - function number
+;; 	al, bx, cx, dx - args to function
 
-; ___________________________________________________________________
-; int 20h handler
-; return to shell
-
-int20h:
-	mov si, int20msg
-	call display_string
-	
-	popf				; restore flags
-	pop dx				; don't return to program
-	pop bx
-
-	call dbg_print_word_dx
-	mov dx, bx
-	call dbg_print_word_dx
-	
-	push shell.system_loop		; to system shell loop
-	retn
-int20msg	db 	"Int 20h executing...",13,10,0
-
-
-; ___________________________________________________________________
-;; called every 1/55 sec
-int08h:
 	pusha
-	push es
-	mov bx, KERNEL_SEGM
-	mov es, bx
-	mov ah, byte [es:show_clock]
-	pop es
-	test ah, ah
-	jz .ret
-
-	;; clock
-	call get_rtc_time
-	;; show time
-	push cx
-	push dx
-	push es
-	mov bx, TXTBUF_SEGM		;; video memory
-	mov es, bx
-	;; tiny hack: cl needed for color, so cl will be out first
-	;; minutes
-	mov dl, cl
-	mov al, cl
-	shr al, 4
-	call hex_digit_to_ascii
-	mov ah, 0x87		;; TODO: neat clock colors :)
-	mov bx, 0x004B		;; position
-	call put_char
-	mov al, dl
-	and al, 0x0F
-	call hex_digit_to_ascii
-	inc bx
-	call put_char
-	;; hours
-	mov bx, 0x0048
-	mov al, ch
-	shr al, 4
-	call hex_digit_to_ascii
-	call put_char
-	inc bx
-	mov al, ch
-	and al, 0x0F
-	call hex_digit_to_ascii
-	call put_char
-	inc bx
-	mov al, ':'
-	call put_char
-	add bx, 3
-	call put_char
-	;; seconds	
-	inc bx
-	mov al, dh
-	shr al, 4
-	call hex_digit_to_ascii
-	call put_char
-	inc bx
-	mov al, dh
-	and al, 0x0f
-	call hex_digit_to_ascii
-	call put_char
-	
-	pop es
-	pop dx
-	pop cx
-.ret:	popa
-	iret
-show_clock db	1
-
-; ___________________________________________________________________	
-int4Ah:
-	pusha
-	;; clock
-	call get_rtc_time
-	;; check whether clock is running
-	push es
-	mov bx, KERNEL_SEGM
-	mov es, bx
-	mov ah, byte [es:show_clock]
-	pop es
-	test ah, ah
-	jz .no_clock
-	
-	;; show time
-	push cx
-	push dx
-	push es
-	mov bx, TXTBUF_SEGM		;; video memory
-	mov es, bx
-	;; tiny hack: cl needed for color, so cl will be out first
-	;; minutes
-	mov dl, cl
-	mov al, cl
-	shr al, 4
-	call hex_digit_to_ascii
-	mov ah, 0x0E		;; TODO: neat clock colors :)
-	mov bx, 0x004B		;; position
-	call put_char
-	mov al, dl
-	and al, 0x0F
-	call hex_digit_to_ascii
-	inc bx
-	call put_char
-	;; hours
-	mov bx, 0x0048
-	mov al, ch
-	shr al, 4
-	call hex_digit_to_ascii
-	call put_char
-	inc bx
-	mov al, ch
-	and al, 0x0F
-	call hex_digit_to_ascii
-	call put_char
-	inc bx
-	mov al, ':'
-	call put_char
-	add bx, 3
-	call put_char
-	;; seconds	
-	inc bx
-	mov al, dh
-	shr al, 4
-	call hex_digit_to_ascii
-	call put_char
-	inc bx
-	mov al, dh
-	and al, 0x0f
-	call hex_digit_to_ascii
-	call put_char
-	
-	pop es
-	pop dx
-	pop cx
-	
-	;; set next int4A for next second
-.no_clock:
-	;call next_second
-	mov cx, 0xFFFF
-	mov dh, 0xFF
-	call set_alarm
+	movzx	di, ah
+	shl	di, 1	;; size of function table enrty
+	mov	si, system_functions_table
+	add	di, si
+	call	word [di]
 	popa
 	iret
 
-section .data
-	
+; ___________________________________________________________________
+dummy_function:
+	mov	dl, ah
+	call	print_hex_dl
+	mov 	si, m_dummy_intr
+	call 	print_string 
+	retn
+
+[section .data]
+
+system_functions_table:
+.sf00	dw	dummy_function
+.sf01	dw	dummy_function	;; wait and read symbol with echo 
+.sf02	dw	dummy_function	;; write to stdout with Ctrl-break check
+.sf03	dw	dummy_function	;; read from STDAUX
+.sf04	dw	dummy_function	;; write to STDAUX
+.sf05	dw	dummy_function	;; write byte to PRN
+.sf06	dw	dummy_function	;; print ascii char in dl 
+.sf07	dw	dummy_function	;; read a symbol from STDIN (no echo, wait, no ^Break);
+.sf08	dw	dummy_function	;; read a symbol from stdin (wait, Ctrl-Break check, no echo)
+.sf09	dw	print_ds_dx	;; print string at [ds:dx]
+.sf0A	dw	read_string	
+.sf0B	dw	dummy_function	;; check kbd state
+.sf0C	dw	dummy_function	;; clear buffer and read symbol (wait)
+.sf0D	dw	dummy_function	;; sync all file buffers
+.sf0E	dw	dummy_function
+.sf0F	dw	dummy_function
+
+.sf10	dw	dummy_function
+.sf11	dw	dummy_function
+.sf12	dw	dummy_function
+.sf13	dw	dummy_function
+.sf14	dw	dummy_function
+.sf15	dw	dummy_function
+.sf16	dw	dummy_function
+.sf17	dw	dummy_function
+.sf18	dw	dummy_function
+.sf19	dw	dummy_function
+.sf1A	dw	dummy_function	;; set DTA offset
+.sf1B	dw	dummy_function
+.sf1C	dw	dummy_function
+.sf1D	dw	dummy_function
+.sf1E	dw	dummy_function
+.sf1F	dw	dummy_function
+
+.sf20	dw	dummy_function	;; 
+.sf21	dw	dummy_function
+.sf22	dw	dummy_function
+.sf23	dw	dummy_function
+.sf24	dw	dummy_function
+.sf25	dw	dummy_function
+.sf26	dw	dummy_function
+.sf27	dw	dummy_function	;; terminate and stay resident
+.sf28	dw	dummy_function
+.sf29	dw	dummy_function	;; print a teletype char
+.sf2A	dw	dummy_function	;; get date
+.sf2B	dw	dummy_function	;; set date
+.sf2C	dw	dummy_function	;; get time
+.sf2D	dw	dummy_function	;; set time
+.sf2E	dw	dummy_function	
+.sf2F	dw	dummy_function
+
+.sf30	dw	dummy_function
+.sf31	dw	dummy_function
+.sf32	dw	dummy_function
+.sf33	dw	dummy_function	;; mouse driver
+.sf34	dw	dummy_function
+.sf35	dw	dummy_function
+.sf36	dw	dummy_function
+.sf37	dw	dummy_function
+.sf38	dw	dummy_function
+.sf39	dw	dummy_function	;; create directory
+.sf3A	dw	dummy_function	;; remove directory
+.sf3B	dw	dummy_function	;; set current dirctory
+.sf3C	dw	dummy_function	;; create file
+.sf3D	dw	dummy_function	;; open file
+.sf3E	dw	dummy_function	;; close file
+.sf3F	dw	dummy_function	;; read from file
+
+.sf40	dw	dummy_function	;; write to file or device
+.sf41	dw	dummy_function	;; remove file
+.sf42	dw	dummy_function  ;; seek position in file
+.sf43	dw	dummy_function	
+.sf44	dw	dummy_function
+.sf45	dw	dummy_function
+.sf46	dw	dummy_function
+.sf47	dw	dummy_function	;; get current directory
+.sf48	dw	mem_allocate	;; allocate memory
+.sf49	dw	mem_release	;; release memory	
+.sf4A	dw	mem_reallocate	;; reallocate memory
+.sf4B	dw	dummy_function	;; load and execute program
+.sf4C	dw	dummy_function
+.sf4D	dw	dummy_function
+.sf4E	dw	dummy_function	;; find first file
+.sf4F	dw	dummy_function	;; find next file
+
+.sf50	dw	dummy_function
+.sf51	dw	dummy_function
+.sf52	dw	dummy_function
+.sf53	dw	dummy_function
+.sf54	dw	dummy_function
+.sf55	dw	dummy_function
+.sf56	dw	dummy_function
+.sf57	dw	dummy_function
+.sf58	dw	dummy_function
+.sf59	dw	dummy_function
+.sf5A	dw	dummy_function	;; create and open temp file	
+.sf5B	dw	dummy_function
+.sf5C	dw	dummy_function
+.sf5D	dw	dummy_function
+.sf5E	dw	dummy_function
+.sf5F	dw	dummy_function
+
+.sf67	dw	dummy_function
+.sf68	dw	dummy_function	;; syncing of file caches
+
+.sf71	dw	dummy_function	;; LFN functions
+
 %endif

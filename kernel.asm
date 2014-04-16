@@ -18,65 +18,39 @@ kernel_start:
 	mov ss, ax		;
 	mov sp, STACK_SIZE	; global stack size 0xFFFF
 	sti
-
+	
 	; initialize
-	call intr_init
-	call init_heap
-	call fmount_fat12
-	mov si, endl
-	call display_string
+	call init_interrupts
+	call init_memory
+
+	; run
 	call press_any
 
-	; shell mode
+	mov si, m_system_welcome
+	call print_string
+
 	call shell
-
-; ___________________________________________________________________
-reboot:
-; tries to reboot computer
-	int 0x19
-
-; ___________________________________________________________________
-turnoff:
-; turn off power for all bios-managed devices
-; args: none
-	mov ax, 5307h	; bios power management
-	mov bx, 0001h	; all devices, where power managed by bios
-	mov cx, 0003h	; state: off
-	int 0x15
-; ___________________________________________________________________
-delay:
-; void delay(ax ms) 
-	pusha
-	mov cx, 1000
-	mul cx
-	jc .long
-	xor cx, cx
-	jmp .endif	
-.long:	mov cx, dx
-.endif:	mov dx, ax
-	mov ah, 86h
-	int 15h
-	popa
-	retn
-
-;; __________________________________________________________________
-execute:
-;//	__far ax:status execute(ds:dx name)
 	
-	retf
+	call turnoff
 
-%include "heap.inc"
-%include "intrs.inc"	
-%include "shell.inc"
+;; ___________________________________________________________________
+
+%include "msgs.inc"
+
 %include "time.inc"
+%include "stdio.inc"
+%include "acpi.inc"
+%include "intrs.inc"
+%include "mm.inc"
 
-;;; %include "fs.inc" we're not ready now to encapsulate
-%include "fat12.inc"		; \\\TODO: encapsulate it in fs.inc!
+%include "shell.inc"
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 [segment .data]
-build_date  	db	__DATE__, 0
-build_time  	db	__TIME__, 0
+
+build_date:  	db	__DATE__, 0
+build_time:  	db	__TIME__, 0
 
 ; the DATA segment! Otherwise kernel_end will be at the end of code, 
 ;	but before data and heap will overwrite kernel data
