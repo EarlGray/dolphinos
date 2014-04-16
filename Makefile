@@ -1,9 +1,9 @@
 
-BOOT=../boot/bfat12.asm
+BOOT=bfat12.asm
 KERN=kernel.asm
 KERNEL=KERNEL.BIN
 MBR_FILE=boot.mbr
-IMG_FILE=../dolphin.img
+IMG_FILE=dolphin.img
 MNT_DIR=dolphin
 VBOX_OS=dolphin
 
