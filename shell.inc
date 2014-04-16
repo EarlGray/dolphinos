@@ -12,8 +12,9 @@
 
 [section .text]
 
+;; __________________________________________________________________
 shell:
-; just shell
+;; just shell
 	
 .shell_loop:
 	mov si, def_prompt
@@ -29,14 +30,14 @@ shell:
 	call parse_cmdline
 
 	mov cx, internal_cmds_size
-	mov di, internal_commands
+	mov bx, internal_commands
 .cmd_loop:
 	call cmdcmp
 	jne .next
-	call word [di + INTCMDS_ENTRY_SIZE - 2]
+	call word [bx + INTCMDS_ENTRY_SIZE - 2]
 	jmp .shell_loop
 .next:
-	add di, INTCMDS_ENTRY_SIZE
+	add bx, INTCMDS_ENTRY_SIZE
 	loop .cmd_loop
 	
 	mov si, m_unknown_cmd
@@ -48,19 +49,19 @@ shell:
 
 ; ___________________________________________________________________
 cmdcmp:
-	push di
-	mov si, word [arg.0]
+    mov di, word [bx]
+	mov si, word [arg.n0]
 .next:
-    	cmpsb
+    cmpsb
 	jne .ret
 	mov al, byte [di]
 	test al, al
 	jnz .next
 	cmpsb
 	
-.ret:	pop di
+.ret:
 	retn
-
+    
 ; ___________________________________________________________________
 parse_cmdline:
 ;; divides cmdbuf string into words in-place, inserting 0 (endofline) 
@@ -131,33 +132,45 @@ shell_exit:
 
 MAX_ARGC	equ	8
 CMDBUF_SIZE	equ	256
-INTCMDS_ENTRY_SIZE	equ	10
+INTCMDS_ENTRY_SIZE	equ	4
+
+command_name:
+.exit:      db  "exit", 0
+.off:       db  "off", 0
+.memdump:   db  "mem", 0
+.args:      db  "args", 0
+.cpu:       db  "cpu", 0
+.egg:       db  "egg", 0
 
 internal_commands:
 .exit:	
-	db	"exit", 0, 0, 0, 0
+	dw	command_name.exit
 	dw	shell_exit
 .off:	
-	db	"off", 0, 0, 0, 0, 0
+	dw  command_name.off
 	dw	turnoff
 .memdump:
-	db	"memdmp", 0, 0
+	dw	command_name.memdump
 	dw	sh_mem_dump
 .argsout:
-	db	"args", 0, 0, 0, 0
+	dw	command_name.args
 	dw 	dbg_show_args
+.cpu:
+    dw  command_name.cpu
+    dw  dbg_cpu_state
+.egg:
+    dw  command_name.egg
+    dw  dbg_something
 
 internal_cmds_size equ ($ - internal_commands)/INTCMDS_ENTRY_SIZE
 
 cmdbuf:	times CMDBUF_SIZE db 0x00
 
-;; just 5 possible arguments at the moment
-
 argc:	db	MAX_ARGC	;; just to fill
 arg:
 %assign i 0
 %rep MAX_ARGC
-.%[i]:	dw	((i + '0') << 8) + 'A'
+.n%[i]:	dw	((i + '0') << 8) + 'A'
 %assign i i+1
 %endrep
 

@@ -11,78 +11,97 @@
 %include "stdio.inc"
 %endif
 
-MEM_BLOCK_SIZE	equ	0x200
-MEM_TABLE_SIZE	equ	0x800
-MAT_ENTRY_SIZE	equ	0x04
-
 ; Memory management
-; Memory is mapped to Memory Allocation Table just after kernel code
 
 ;;
-;;   <------- System memory ----->		Userspace
-;;     BIOS   kernel       MAT      Heap and code         Disk cache  Stack
-;;   <----> <-------->  <--------> ---->                        <---   <----
-;;  |------|---------|-|---------||--------------------- . . .------|-------|
-;;0000  KERN_SEG       [mat_segm]                                       0xA000
+;;   <-- Sysmemory -->		       Userspace
+;;     BIOS   kernel     Heap and code         Disk cache  Stack
+;;   <----> <-------->   ---->                        <---   <----
+;;  |------|---------|----------------------- . . .------|-------|
+;;0000  KERN_SEG                                              0xA000
 
-; MAT describes memory blocks with MAT entry (4 byte for each):
-; memory from 0x00000 to 0x9FFFF
 ; Entry:
 ;	first byte is a block type descriptor:
+; |---1b----|---1b----|---------2b---------|info...
+;   prop    checksum    length in bytes    pointer
+;     prop+low(l+p)+high(l+p)
 
-MEM_FREE_CLUSTER	equ	0x00
-MEM_HEAP_CLUSTER	equ	0x01	;; used memory
-MEM_DISK_CACHE_CLUSTER	equ	0x02	;; can be used if there are no free clusters
-MEM_EXECUTABLE_CLUSTER	equ	0x03
-MEM_SYSTEM_CLUSTER	equ	0x0F	;; kernel and BIOS
+; prop:
+MEM_FREE	equ	0x0000
+MEM_USED	equ	0x8000	;; used memory
 
 ; according to a type, entry can be:
 
 [section .text]
 
 ; ___________________________________________________________________
+; check checksum at 16b-sheer dx
+; in:   di (16b-offset of chunk)
+; out   zf=0 if fails
+; corrupts 
+check_chunk:
+    push gs
+    sub di, 1
+    mov gs, di
+    mov ax, word [gs:0xE]   ;; size of chunk in 16b-paragraphes
+    add di, 1
+    add ax, di
+    and ax, 0x7FFF
+    mov bx, word [gs:0xC]   ;; 15bit-checksum + 0x8000 if used
+    and bx, 0x7FFF
+    cmp ax, bx    
+    pop gs
+    retn
+
+; ___________________________________________________________________
+; put used chunk at_16b, length_b, prop
+; in:   dx  - 16b-offset where to put, oldest bit is whether to use
+;       cx  - reqired size in 16b
+;       
+put_chunk:
+    push gs
+
+    mov bx, 0x7FFF
+    or bx, dx  ;; bx is a mask to AND with checksum
+
+    sub dx, 1   
+    mov gs, dx
+    add dx, 1
+
+    mov word [gs:0xE], cx
+    add cx, dx          ;; make checksum as (pointer16 + length16)
+    and cx, bx          ;; set 'used' bit
+
+    mov word [gs:0xC], cx
+    
+    pop gs
+    retn
+
+; ___________________________________________________________________
+; determine paragraph of next chunk: 
+; in:   dx - 16b-offset of current
+; out:  dx - 16b-offset of next
+next_chunk:
+    push gs
+    sub dx, 1
+    mov gs, dx
+    add dx, 1
+    ;;
+    add dx, word [gs:0xE]
+    pop gs
+    retn
+
+; ___________________________________________________________________
 init_memory:
-	;; calculate MAT segment
+	;; calculate segment
 	mov ax, word kernel_end
-	shr ax, 4
-	add ax, KERNEL_SEGM
-	inc ax
-	mov word [mat_segm], ax
-	
-	;; clear table
-	push es
-	mov es, ax
-	mov di, 0
+	shr ax, 4			;; [kernel_end]>>4                       KERNEL_SEGM+2
+	add ax, KERNEL_SEGM + 2		;; |--kernel_end---|---first_pointer_info|memory------
+	mov word [heap], ax
 
-	mov cx, MEM_TABLE_SIZE
-	xor eax, eax		;; free memory cluster
-   rep	stosd
+	;; put the first pointer info
+    
 
-	;; set bios memory, kernel space and MAT to system memory
-	; MAT size in 16b paragraphs
-	mov ax, ( MEM_TABLE_SIZE * MAT_ENTRY_SIZE ) >> 4
-	add ax, word [mat_segm]
-	; now convert ax to memory blocks
-%if (MEM_BLOCK_SIZE != 0x200)
-%error "Hack"
-%else
-	shr ax, 9	
-%endif
-	inc ax
-	mov cx, ax
-%if MEM_DEBUG
-	mov si, mdbg_sys_mem
-	call print_string
-	mov dx, cx
-	call print_hex_dx
-	call print_endl
-%endif
-	xor eax, eax
-	mov di, ax
-	mov al, MEM_SYSTEM_CLUSTER
-   rep	stosd
-
-	pop es			
 	retn
 
 ; ___________________________________________________________________
@@ -95,7 +114,22 @@ mem_allocate:
 ;;	cf=1 if failed: 
 ;;		ax=7 if heap structure is corrupted
 ;;		ax=8 if there's no memory, bx - size of biggest free chunk
+	;; check whether heap is valid
+	jne .heap_corruption
 	
+	retn
+.search_again:
+	;; search for sufficient block in existing heap
+	;; find the least sufficient piece of memory in heap	
+	; go through list of chunks and save the biggest and least sufficient
+	mov dx, word [heap]		; dx - pointer, ax - least sufficient 
+	
+	
+	retn
+
+.heap_corruption:
+	mov ax, 7	; errcode
+	stc 
 	retn
 
 ; ___________________________________________________________________
@@ -110,7 +144,6 @@ mem_release:
 
 [section .data]
 
-mat_segm:	dw	0x0000
-
+heap:	 	dw	0x0000
 
 %endif

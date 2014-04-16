@@ -8,6 +8,8 @@ endl:			db	13,10,0
 m_system_welcome:	db	13, 10, "     Welcome to DolphinOS", 13, 10, 10, 0
 
 m_dummy_intr:		db	": this function is not implemented", 13, 10, 0
+m_ctrl_break:       db  "Ctrl-Break, returning to shell...", 13, 10, 0
+m_division_by_zero: db  "Oops, your program has been divided by zero at ", 0
 m_press_any:		db	13, 10, "Press any key to continue...", 13, 10, 0
 m_unknown_cmd:		db	"Unknown command", 13, 10, 0
 m_sh_exiting:		db	"Shell exited...", 13, 10, 0

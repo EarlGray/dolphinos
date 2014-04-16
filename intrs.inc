@@ -11,18 +11,37 @@
 
 [section .text]
 
-; ___________________________________________________________________
-init_interrupts:
-	;; set SYS_INTR handler to sys_int_handler
-	push	ds
-	xor	ax, ax
-	mov 	ds, ax
-	mov	si, SYS_INTR
+;; SET_INTR intr_num handler_addr
+%macro SET_INTERRUPT 2       
+ 	mov	si, %1
 	shl	si, 2	;; mul by 4, int handler size
-	mov	ax, sys_int_handler
+	mov	ax, %2
 	mov	[si], ax
 	mov	ax, KERNEL_SEGM
 	mov	[si + 2], ax
+%endmacro
+
+%macro INTR_RETURN_TO_SHELL 0
+    pop ax
+    pop ax
+    push word KERNEL_SEGM
+    push word shell
+%endmacro
+
+; ___________________________________________________________________
+init_interrupts:
+	push	ds
+	xor	ax, ax
+	mov 	ds, ax
+
+	;; set SYS_INTR handler to sys_int_handler
+    SET_INTERRUPT SYS_INTR, sys_int_handler
+
+    ;; set Ctrl-Break intr handler
+    SET_INTERRUPT 0x1B, ctrlbreak_intr_handler
+
+    SET_INTERRUPT 0x00, division_by_zero_handler
+    
 	pop	ds
 	retn
 
@@ -40,6 +59,28 @@ sys_int_handler:
 	call	word [di]
 	popa
 	iret
+
+; ___________________________________________________________________
+division_by_zero_handler:
+    mov si, m_division_by_zero
+    call print_string
+    mov di, sp
+    mov dx, word [ss : di + 2]
+    call print_hex_dx
+    mov al, ':'
+    call print_char
+    mov dx, word [ss : di]
+    call print_hex_dx
+    call print_endl
+    INTR_RETURN_TO_SHELL
+    iret
+
+; ___________________________________________________________________
+ctrlbreak_intr_handler:
+    mov si, m_ctrl_break
+    call print_string
+    INTR_RETURN_TO_SHELL
+    iret
 
 ; ___________________________________________________________________
 dummy_function:

@@ -28,12 +28,58 @@ print_ascii_al:
 	retn
 
 ; ___________________________________________________________________
-print_endl:
-	mov ax, 0x0E0D
+print_ascii_dl:
+	mov al, dl
+	mov ah, 0x0E
 	mov bh, 0x00
+	int 0x10
+	retn
+
+; ___________________________________________________________________
+print_endl:
+	mov bh, 0x00
+	mov ax, 0x0E0D
 	int 0x10
 	mov al, 0x0A
 	int 0x10
+	retn
+
+substitute_keys:
+    cmp ah, 0x1A
+    jne .notlqb
+    mov al, '('
+.notlqb:
+    cmp ah, 0x1B
+    jne .notrqb
+    mov al, ')'
+.notrqb:
+    ret
+
+; ___________________________________________________________________
+wait_key:
+read_char:
+; waits for a key press, returns it
+; args: none
+; out:  al - ASCII-code, 0, or scan-code prefix
+;;;	mov ah, 10h			; 101/102 keys
+;;;	int 16h	; - this stinking interrupt loads 95% CPU!
+	;int 0x4A
+.loop:
+	mov ax, 20
+	call delay
+	mov ah, 11h
+	int 16h
+	jz .loop
+	;; clear keyboard buffer
+	push ds
+	push 0
+	pop ds
+	mov dx, word [041Ah]
+	mov word [041Ch], dx	; clear buffer
+	;; process some specific shortcuts
+    call substitute_keys
+	;call shortcuts
+	pop ds
 	retn
 
 ; ___________________________________________________________________
@@ -134,76 +180,41 @@ read_string:
 	retn
 
 ; ___________________________________________________________________
-print_ascii_dl:
-	mov al, dl
-	mov ah, 0x0E
-	mov bh, 0x00
-	int 0x10
-	retn
-
-; ___________________________________________________________________
-wait_key:
-read_char:
-; waits for a key press, returns it
-; args: none
-; out:  al - ASCII-code, 0, or scan-code prefix
-;;;	mov ah, 10h			; 101/102 keys
-;;;	int 16h	; - this stinking interrupt loads 95% CPU!
-	;int 0x4A
-.loop:
-	mov ax, 20
-	call delay
-	mov ah, 11h
-	int 16h
-	jz .loop
-	;; clear keyboard buffer
-	push ds
-	push 0
-	pop ds
-	mov dx, word [041Ah]
-	mov word [041Ch], dx	; clear buffer
-	;; process some specific shortcuts
-	;call shortcuts
-	pop ds
-	retn
-
-; ___________________________________________________________________
 print_hex_digit_al:
 	and al, 0x0F
 	movzx si, al
-	add si, .digits
+	add si, hextable
 	mov al, byte [si]
 	mov ah, 0x0E
 	mov bh, 0x00
 	int 0x10
 	retn
-.digits	db	"0123456789ABCDEF"
 
 ; ___________________________________________________________________
 print_hex_dl:
 ;; args:
 ;; 	dl - hexadecimal number to output
 	pusha
-	mov al, dl
-	shr al, 4
-	call print_hex_digit_al
-	mov al, dl
-	and al, 0x0F
-	call print_hex_digit_al
+    mov di, .arg
+    call dl_to_hex8_di
+    mov si, .arg
+    call print_string
 	popa
 	retn
+.arg:   db  'AB', 0x00
 
 ; ___________________________________________________________________
 print_hex_dx:
 ;; args:
 ;; 	dx - hexadecimal number to output
 	pusha 
-	xchg dl, dh
-	call print_hex_dl
-	mov dl, dh
-	call print_hex_dl
+	mov di, .arg
+	call dx_to_hex16_di
+    mov si, .arg
+	call print_string
 	popa
 	retn
+.arg:   db  'ABCD', 0x00
 
 ; ___________________________________________________________________
 read_hex_dx:
@@ -212,30 +223,6 @@ read_hex_dx:
 ;; rets:
 ;;	dx - hexadecimal number in [es:di]
 	
-	retn
-
-; ___________________________________________________________________
-ascii_to_hex_digit_dl:
-	cmp dl, '0'
-	jl .fail
-	cmp dl, '9'
-	jg .next
-	sub dl, '0'
-	retn
-.next:
-	cmp dl, 'A'
-	jl .fail
-	cmp dl, 'F'
-	jg .next1
-	sub dl, 'A' - 10
-	retn
-.next1:	cmp dl, 'a'
-	jl .fail
-	cmp dl, 'f'
-	jg .fail
-	sub dl, 'a' - 10
-	retn
-.fail:	mov dl, 0xFF
 	retn
 
 [section .data]

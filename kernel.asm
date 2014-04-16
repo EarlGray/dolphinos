@@ -5,9 +5,11 @@
 
 %include "sysdefs.inc"
 
-kernel_start:
-	org KERNEL_OFFS
 [segment .text]
+
+	org KERNEL_OFFS
+
+kernel_start:
 	cli
 	; prepare memory state
 	mov ax, KERNEL_SEGM
@@ -18,7 +20,7 @@ kernel_start:
 	mov ss, ax		;
 	mov sp, STACK_SIZE	; global stack size 0xFFFF
 	sti
-	
+
 	; initialize
 	call init_interrupts
 	call init_memory
